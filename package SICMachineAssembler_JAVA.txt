@@ -1,0 +1,237 @@
+package SICMachineAssembler_JAVA;
+
+import java.io.*;
+import java.util.*;
+
+
+public class SICAssembler {
+
+    // Constants for File Paths
+    private static final String INPUT_FILE = "C:\\Users\\omars\\OneDrive\\Desktop\\ProjectSystemLastTry\\START 1000.txt";
+    private static final String INTERMEDIATE_FILE = "C:\\Users\\omars\\OneDrive\\Desktop\\ProjectSystemLastTry\\intermediate.txt";
+    private static final String SYMBOL_TABLE_FILE = "C:\\Users\\omars\\OneDrive\\Desktop\\ProjectSystemLastTry\\symbol_table.txt";
+    private static final String OUTPUT_FILE = "C:\\Users\\omars\\OneDrive\\Desktop\\ProjectSystemLastTry\\output.txt";
+    private static final String OPTAB_FILE = "C:\\Users\\omars\\OneDrive\\Desktop\\ProjectSystemLastTry\\op_table.txt";
+    private static final String USED_OPTAB_FILE = "C:\\Users\\omars\\OneDrive\\Desktop\\ProjectSystemLastTry\\used_op_table.txt";
+
+    // SIC Operation Table
+    private static final Map<String, String> OPTAB = new LinkedHashMap<>();
+    private static final Map<String, Integer> SYMTAB = new LinkedHashMap<>(); // Symbol Table
+
+    private static int LOCCTR; // Location Counter
+
+    public static void main(String[] args) {
+        try {
+            // Load OPTAB
+            loadOpTable();
+
+            // Pass 1: Generate Intermediate File and Symbol Table
+                pass1();
+
+            // Pass 2: Generate Object Program and Output Files
+            pass2();
+
+            System.out.println("SIC Assembler Execution Completed Successfully!");
+        } catch (Exception e) {
+            System.err.println("Error during SIC Assembler execution: " + e.getMessage());
+            //noinspection CallToPrintStackTrace
+            e.printStackTrace();
+        }
+    }
+
+    // Method to Load OPTAB from a File
+    private static void loadOpTable() throws IOException {
+        try (BufferedReader reader = new BufferedReader(new FileReader(OPTAB_FILE))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                String[] parts = line.trim().split("\\s+");
+                if (parts.length == 2) {
+                    OPTAB.put(parts[0], parts[1]);
+                }
+            }
+        }
+    }
+
+    // Pass 1: Generate Intermediate File and Symbol Table
+    private static void pass1() throws IOException {
+        try (BufferedReader reader = new BufferedReader(new FileReader(INPUT_FILE));
+             BufferedWriter interWriter = new BufferedWriter(new FileWriter(INTERMEDIATE_FILE));
+             BufferedWriter symWriter = new BufferedWriter(new FileWriter(SYMBOL_TABLE_FILE))) {
+
+            LOCCTR = 0; // Initially undefined
+
+            // Process the first line (START directive)
+            String line = reader.readLine();
+            if (line != null) {
+                String[] tokens = line.trim().split("\\s+");
+                int START_ADDRESS;
+                if (tokens.length == 2 && tokens[0].equalsIgnoreCase("START")) {
+                    START_ADDRESS = Integer.parseInt(tokens[1], 16);
+                    LOCCTR = START_ADDRESS;
+                    interWriter.write(String.format("%04X\t%s%n", LOCCTR, line));
+                    line = reader.readLine();
+                } else if (tokens.length >= 3 && tokens[1].equalsIgnoreCase("START")) {
+                    START_ADDRESS = Integer.parseInt(tokens[2], 16);
+                    LOCCTR = START_ADDRESS;
+                    interWriter.write(String.format("%04X\t%s%n", LOCCTR, line));
+                    line = reader.readLine();
+                }
+            }
+
+            // Process remaining lines
+            while (line != null) {
+                if (line.trim().isEmpty() || line.startsWith(".")) { // Skip empty lines and comments
+                    line = reader.readLine();
+                    continue;
+                }
+                processLine(line, interWriter);
+                line = reader.readLine();
+            }
+
+            // Write Symbol Table to File
+            for (Map.Entry<String, Integer> entry : SYMTAB.entrySet()) {
+                symWriter.write(String.format("%s\t%04X%n", entry.getKey(), entry.getValue()));
+            }
+        }
+    }
+
+    // Process a single line in Pass 1
+    private static void processLine(String line, BufferedWriter interWriter) throws IOException {
+        String[] tokens = line.trim().split("\\s+");
+        String label = tokens.length > 2 ? tokens[0] : null;
+        String opcode = tokens.length > 2 ? tokens[1] : tokens[0];
+        String operand = tokens.length > 2 ? tokens[2] : tokens.length > 1 ? tokens[1] : null;
+
+        // Add label to Symbol Table
+        if (label != null) {
+            if (SYMTAB.containsKey(label)) {
+                throw new IllegalStateException("Duplicate symbol '" + label + "' at address " + LOCCTR); // <-----------------------
+            } else {
+                SYMTAB.put(label, LOCCTR);
+            }
+        }
+
+        // Write intermediate line
+        interWriter.write(formatIntermediateLine(LOCCTR, line));
+
+        // Update LOCCTR based on opcode
+        LOCCTR += calculateInstructionSize(opcode, operand);
+    }
+
+    // Calculate the size of the current instruction
+    private static int calculateInstructionSize(String opcode, String operand) {
+        if (OPTAB.containsKey(opcode)) {
+            return 3; // Machine instructions are 3 bytes
+        } else if ("WORD".equalsIgnoreCase(opcode)) {
+            try {
+                Integer.parseInt(operand);
+                return 3; // <----------------------- Handle WORD correctly
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("Invalid operand for WORD: " + operand); // <----------------------- Error handling for WORD operand
+            }
+        } else if ("RESW".equalsIgnoreCase(opcode)) {
+            return 3 * Integer.parseInt(operand);
+        } else if ("RESB".equalsIgnoreCase(opcode)) {
+            return Integer.parseInt(operand);
+        } else if ("BYTE".equalsIgnoreCase(opcode)) {
+            return operand.startsWith("C'") ? operand.length() - 3 : operand.startsWith("X'") ? (operand.length() - 3) / 2 : 1;
+        }
+        return 0;
+    }
+
+    // Format a line for the intermediate file
+    private static String formatIntermediateLine(int locctr, String line) {
+        return String.format("%04X\t%s%n", locctr, line);
+    }
+
+    // Pass 2: Generate Object Program and Output Files
+    private static void pass2() throws IOException {
+        try (BufferedReader interReader = new BufferedReader(new FileReader(INTERMEDIATE_FILE));
+             BufferedWriter outputWriter = new BufferedWriter(new FileWriter(OUTPUT_FILE));
+             BufferedWriter optabWriter = new BufferedWriter(new FileWriter(USED_OPTAB_FILE))) {
+
+            HashSet<String> usedOpcodes = new HashSet<>(); // Track used opcodes
+            String headerRecord = "";
+            StringBuilder textRecord = new StringBuilder();
+            String endRecord;
+            String firstExecutable = "";
+
+            // Write Header for Output File
+            outputWriter.write(String.format("%-8s%-10s%-10s%-10s%-10s%n", "Address", "Label", "Opcode", "Operand", "Object Code"));
+
+            String line;
+            while ((line = interReader.readLine()) != null) {
+                String[] parts = line.trim().split("\\s+");
+                int address = Integer.parseInt(parts[0], 16);
+                String[] tokens = Arrays.copyOfRange(parts, 1, parts.length);
+
+                String opcode = tokens.length > 2 ? tokens[1] : tokens[0];
+                String operand = tokens.length > 2 ? tokens[2] : tokens.length > 1 ? tokens[1] : "";
+                String objectCode = generateObjectCode(opcode, operand, usedOpcodes);
+                String label = tokens.length > 2 ? tokens[0] : "";
+
+                // Start Header Record
+                if ("START".equalsIgnoreCase(opcode)) {
+                    headerRecord = String.format("H^%-6s^%06X^%06X", label, address, 0); // <----------------------- Updated header format
+                    firstExecutable = String.format("%04X", address);
+                }
+
+                // Update Text Record
+                if (!objectCode.isEmpty()) {
+                    if (textRecord.isEmpty()) textRecord.append(String.format("T^%06X^", address));
+                    textRecord.append(objectCode).append("^");
+                }
+
+                // Write to output
+                outputWriter.write(String.format("%04X    %-10s%-10s%-10s%-10s%n", address, label, opcode, operand, objectCode));
+            }
+
+            // Finalize Records
+            endRecord = String.format("E^%06X", Integer.parseInt(firstExecutable, 16));
+            outputWriter.write("\n--- Object Program ---\n");
+            outputWriter.write(headerRecord + "\n");
+            outputWriter.write(textRecord.substring(0, textRecord.length() - 1) + "\n");
+            outputWriter.write(endRecord + "\n");
+
+            // Write Used Opcodes
+            for (String opcode : usedOpcodes) {
+                optabWriter.write(String.format("%-10s%-10s%n", opcode, OPTAB.get(opcode)));
+            }
+        }
+    }
+
+    // Generate Object Code for Pass 2
+    private static String generateObjectCode(String opcode, String operand, HashSet<String> usedOpcodes) {
+        if (OPTAB.containsKey(opcode)) {
+            usedOpcodes.add(opcode);
+            String code = OPTAB.get(opcode);
+            if (!operand.isEmpty() && SYMTAB.containsKey(operand)) {
+                code += String.format("%04X", SYMTAB.get(operand));
+            } else {
+                code += "0000";
+            }
+            return code;
+        } else if ("BYTE".equalsIgnoreCase(opcode)) {
+            return generateByteObjectCode(operand);
+        } else if ("WORD".equalsIgnoreCase(opcode)) {
+            try {
+                return String.format("%06X", Integer.parseInt(operand)); // <----------------------- Fixed WORD operand
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("Invalid operand for WORD: " + operand);
+            }
+        }
+        return "";
+    }
+
+    // Generate Object Code for BYTE
+    private static String generateByteObjectCode(String operand) {
+        if (operand.startsWith("C'")) {
+            return operand.substring(2, operand.length() - 1).chars()
+                    .mapToObj(c -> String.format("%02X", c))
+                    .reduce("", String::concat);
+        } else if (operand.startsWith("X'")) {
+            return operand.substring(2, operand.length() - 1);
+        }
+        return "";
+    }
+}

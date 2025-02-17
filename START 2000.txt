@@ -1,0 +1,9 @@
+STRCPY	START 2000
+FIRST    LDA  ALPHA
+         STA  BETA
+         BYTE C'EOF'
+         WORD 1234
+         RESW 1
+ALPHA    RESB 1
+BETA     WORD 5678
+         END  FIRST

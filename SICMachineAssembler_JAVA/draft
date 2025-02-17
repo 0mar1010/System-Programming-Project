@@ -1,0 +1,7 @@
+String inputFile = "C:\\Users\\omars\\OneDrive\\Desktop\\ProjectSystemLastTry\\START 3000.txt";
+String outputFile = "C:\\Users\\omars\\OneDrive\\Desktop\\ProjectSystemLastTry\\output.txt";
+String intermediateFile = "C:\\Users\\omars\\OneDrive\\Desktop\\ProjectSystemLastTry\\intermediate.txt";
+String symbolTableFile = "C:\\Users\\omars\\OneDrive\\Desktop\\ProjectSystemLastTry\\symbol_table.txt";
+String opTableFile = "C:\\Users\\omars\\OneDrive\\Desktop\\ProjectSystemLastTry\\op_table.txt";
+String outputObjectCodeFile = "C:\\Users\\omars\\OneDrive\\Desktop\\ProjectSystemLastTry\\object_code.txt";
+String outputObjectProgramFile = "C:\\Users\\omars\\OneDrive\\Desktop\\ProjectSystemLastTry\\object_program.txt";

@@ -1,0 +1,15 @@
+Address Label     Opcode    Operand   Object Code
+1000    STRCPY    START     1000                
+1000    LOOP      LDA       NUM1      00100C    
+1003              ADD       NUM2      18100F    
+1006              STA       RESULT    0C1012    
+1009              J         LOOP      3C1000    
+100C    NUM1      WORD      5         000005    
+100F    NUM2      WORD      10        00000A    
+1012    RESULT    RESW      1                   
+1015              END                           
+
+--- Object Program ---
+H^STRCPY^001000^000000
+T^001000^00100C^18100F^0C1012^3C1000^000005^00000A
+E^001000
